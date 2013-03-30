@@ -171,7 +171,7 @@ public class CroutonFragment extends Fragment implements AdapterView.OnItemSelec
         return mManager;
     }
 
-  private void showCrouton(String croutonText, Style croutonStyle) {
+  private void showCrouton(String croutonText, Style croutonStyle, Configuration configuration) {
     final boolean infinite = INFINITE == croutonStyle;
 
     if (infinite) {
