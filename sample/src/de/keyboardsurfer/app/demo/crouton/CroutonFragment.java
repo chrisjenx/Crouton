@@ -28,6 +28,7 @@ import android.widget.EditText;
 import android.widget.Spinner;
 import de.keyboardsurfer.android.widget.crouton.Configuration;
 import de.keyboardsurfer.android.widget.crouton.Crouton;
+import de.keyboardsurfer.android.widget.crouton.Manager;
 import de.keyboardsurfer.android.widget.crouton.Style;
 
 /**
@@ -48,6 +49,7 @@ public class CroutonFragment extends Fragment implements AdapterView.OnItemSelec
   private EditText croutonTextEdit;
   private EditText croutonDurationEdit;
   private Crouton infiniteCrouton;
+    private Manager mManager;
 
   @Override
   public void onCreate(Bundle savedInstanceState) {
@@ -163,13 +165,19 @@ public class CroutonFragment extends Fragment implements AdapterView.OnItemSelec
     return croutonDurationEdit.getText().toString().trim();
   }
 
-  private void showCrouton(String croutonText, Style croutonStyle, Configuration configuration) {
+    private Manager getCroutonManager(){
+        if(mManager == null)
+            mManager = Crouton.getNewManager();
+        return mManager;
+    }
+
+  private void showCrouton(String croutonText, Style croutonStyle) {
     final boolean infinite = INFINITE == croutonStyle;
-    
+
     if (infinite) {
       croutonText = getString(R.string.infinity_text);
     }
-    
+
     final Crouton crouton;
     if (displayOnTop.isChecked()) {
       crouton = Crouton.makeText(getActivity(), croutonText, croutonStyle);
@@ -179,7 +187,7 @@ public class CroutonFragment extends Fragment implements AdapterView.OnItemSelec
     if (infinite) {
       infiniteCrouton = crouton;
     }
-    crouton.setOnClickListener(this).setConfiguration(infinite ? INFINITE_CONFIG : configuration).show();
+    crouton.setOnClickListener(this).setConfiguration(infinite ? INFINITE_CONFIG : configuration).setCroutonManager(infinite ? null : getCroutonManager()).show();
   }
 
   @Override

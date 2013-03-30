@@ -57,14 +57,15 @@ public final class Crouton {
     private final View customView;
     private Configuration configuration;
 
-    private OnClickListener onClickListener;
-
-    private Activity activity;
-    private ViewGroup viewGroup;
-    private FrameLayout croutonView;
-    private Animation inAnimation;
-    private Animation outAnimation;
-    private LifecycleCallback lifecycleCallback = null;
+  private OnClickListener onClickListener;
+  
+  private Activity activity;
+  private ViewGroup viewGroup;
+  private FrameLayout croutonView;
+  private Animation inAnimation;
+  private Animation outAnimation;
+  private LifecycleCallback lifecycleCallback = null;
+  private Manager manager = null;
 
     /**
      * Creates the {@link Crouton}.
@@ -174,6 +175,17 @@ public final class Crouton {
         this.style = new Style.Builder().build();
         this.configuration = configuration;
         this.text = null;
+    }
+
+
+    /**
+     * Short hand for getting a new Manager, this will provide you a new queue to put croutons on.
+     * You should only need this in special cases.
+     *
+     * @return a new Manger instance
+     */
+    public static Manager getNewManager() {
+        return Manager.getNewInstance();
     }
 
     /**
@@ -474,97 +486,46 @@ public final class Crouton {
     }
 
     /**
-     * Creates a {@link Crouton} with provided text-resource and style for a given
-     * activity and displays it directly.
-     *
-     * @param activity
-     *   The {@link Activity} that the {@link Crouton} should be attached
-     *   to.
-     * @param textResourceId
-     *   The resource id of the text you want to display.
-     * @param style
-     *   The style that this {@link Crouton} should be created with.
-     */
-    public static void showText(Activity activity, int textResourceId, Style style) {
-        showText(activity, activity.getString(textResourceId), style);
-    }
-
-    /**
-     * Creates a {@link Crouton} with provided text-resource and style for a given
-     * activity and displays it directly.
-     *
-     * @param activity
-     *   The {@link Activity} that represents the context in which the Crouton should exist.
-     * @param textResourceId
-     *   The resource id of the text you want to display.
-     * @param style
-     *   The style that this {@link Crouton} should be created with.
-     * @param viewGroup
-     *   The {@link ViewGroup} that this {@link Crouton} should be added to.
-     */
-    public static void showText(Activity activity, int textResourceId, Style style, ViewGroup viewGroup) {
-        showText(activity, activity.getString(textResourceId), style, viewGroup);
-    }
-
-    /**
-     * Creates a {@link Crouton} with provided text-resource and style for a given
-     * activity and displays it directly.
-     *
-     * @param activity
-     *   The {@link Activity} that represents the context in which the Crouton should exist.
-     * @param textResourceId
-     *   The resource id of the text you want to display.
-     * @param style
-     *   The style that this {@link Crouton} should be created with.
-     * @param viewGroupResId
-     *   The resource id of the {@link ViewGroup} that this {@link Crouton} should be added to.
-     */
-    public static void showText(Activity activity, int textResourceId, Style style, int viewGroupResId) {
-        showText(activity, activity.getString(textResourceId), style, viewGroupResId);
-    }
-
-    /**
      * Allows hiding of a previously displayed {@link Crouton}.
      * @param crouton The {@link Crouton} you want to hide.
      */
-    public static void hide(Crouton crouton) {
-        Manager.getInstance().removeCrouton(crouton);
+    public static void hide(final Crouton crouton) {
+        if(crouton != null) crouton.getCroutonManager().removeCrouton(crouton);
     }
 
-    /**
-     * Cancels all queued {@link Crouton}s. If there is a {@link Crouton}
-     * displayed currently, it will be the last one displayed.
-     */
-    public static void cancelAllCroutons() {
-        Manager.getInstance().clearCroutonQueue();
-    }
+  /**
+   * Cancels all queued {@link Crouton}s. If there is a {@link Crouton}
+   * displayed currently, it will be the last one displayed.
+   */
+  public static void cancelAllCroutons() {
+    Manager.clearAllCroutonQueues();
+  }
 
-    /**
-     * Clears (and removes from {@link Activity}'s content view, if necessary) all
-     * croutons for the provided activity
-     *
-     * @param activity
-     *   - The {@link Activity} to clear the croutons for.
-     */
-    public static void clearCroutonsForActivity(Activity activity) {
-        Manager.getInstance().clearCroutonsForActivity(activity);
-    }
+  /**
+   * Clears (and removes from {@link Activity}'s content view, if necessary) all
+   * croutons for the provided activity
+   *
+   * @param activity
+   *   - The {@link Activity} to clear the croutons for.
+   */
+  public static void clearCroutonsForActivity(Activity activity) {
+    Manager.clearAllCroutonsForActivity(activity);
+  }
 
-    /**
-     * Cancels a {@link Crouton} immediately.
-     */
-    public void cancel() {
-        Manager manager = Manager.getInstance();
-        manager.removeCroutonImmediately(this);
-    }
+  /**
+   * Cancels a {@link Crouton} immediately.
+   */
+  public void cancel() {
+      getCroutonManager().removeCroutonImmediately(this);
+  }
 
-    /**
-     * Displays the {@link Crouton}. If there's another {@link Crouton} visible at
-     * the time, this {@link Crouton} will be displayed afterwards.
-     */
-    public void show() {
-        Manager.getInstance().add(this);
-    }
+  /**
+   * Displays the {@link Crouton}. If there's another {@link Crouton} visible at
+   * the time, this {@link Crouton} will be displayed afterwards.
+   */
+  public void show() {
+    getCroutonManager().add(this);
+  }
 
     public Animation getInAnimation() {
         if ((null == this.inAnimation) && (null != this.activity)) {
@@ -586,8 +547,53 @@ public final class Crouton {
                 this.outAnimation = DefaultAnimationsBuilder.buildDefaultSlideOutUpAnimation();
             }
         }
-
         return outAnimation;
+    }
+
+  /**
+   * Allows setting of an {@link OnClickListener} directly to a {@link Crouton} without having to use a custom view.
+   * @param onClickListener The {@link OnClickListener} to set.
+   * @return this {@link Crouton}.
+   */
+  public Crouton setOnClickListener(OnClickListener onClickListener){
+    this.onClickListener = onClickListener;
+    return this;
+  }
+
+    /**
+     * Override the default crouton manager. This is responsible for queueing and showing the Crouton.
+     *
+     * @param manager valid manager. You can get a new one via {@link Crouton#getNewManager()}
+     * @return
+     */
+    public Crouton setCroutonManager(final Manager manager) {
+        this.manager = manager;
+        return this;
+    }
+
+    /**
+     * Set the configuration on this crouton, idea being you can modify the none visual aspects pre showing it.
+     *
+     * @param configuration a configuration build using {@link Configuration.Builder}
+     * @return this {@link Crouton}
+     */
+    public Crouton setConfiguration(final Configuration configuration) {
+        if(configuration != null){
+            this.configuration = configuration;
+        }
+        return this;
+    }
+
+    /**
+     * Creates a manager if one has not be defined. Unless you this crouton to pass it to another manager it shows on the
+     * main one
+     * @return default manager by default unless you set Manager on creation.
+     */
+    Manager getCroutonManager() {
+        if(manager == null) {
+            manager = Manager.getInstance();
+        }
+        return manager;
     }
 
     /**
@@ -597,6 +603,7 @@ public final class Crouton {
     public void setLifecycleCallback(LifecycleCallback lifecycleCallback) {
         this.lifecycleCallback = lifecycleCallback;
     }
+
 
     /**
      * Convenience method to get the license text for embedding within your application.
@@ -619,29 +626,6 @@ public final class Crouton {
                 "WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n" +
                 "See the License for the specific language governing permissions and\n" +
                 "limitations under the License.";
-    }
-
-    /**
-     * Allows setting of an {@link OnClickListener} directly to a {@link Crouton} without having to use a custom view.
-     * @param onClickListener The {@link OnClickListener} to set.
-     * @return this {@link Crouton}.
-     */
-    public Crouton setOnClickListener(OnClickListener onClickListener){
-        this.onClickListener = onClickListener;
-        return this;
-    }
-
-    /**
-     * Set the configuration on this crouton, idea being you can modify the none visual aspects pre showing it.
-     *
-     * @param configuration a configuration build using {@link Configuration.Builder}
-     * @return this {@link Crouton}
-     */
-    public Crouton setConfiguration(final Configuration configuration) {
-        if(configuration != null){
-            this.configuration = configuration;
-        }
-        return this;
     }
 
     /**
