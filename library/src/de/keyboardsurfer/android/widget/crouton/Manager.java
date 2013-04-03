@@ -42,18 +42,8 @@ import java.util.concurrent.LinkedBlockingQueue;
  * Manages the lifecycle of {@link Crouton}s.
  */
 public final class Manager extends Handler {
-  private static final class Messages {
-    private Messages() { /* no-op */
-    }
-
-    public static final int DISPLAY_CROUTON = 0xc2007;
-    public static final int ADD_CROUTON_TO_VIEW = 0xc20074dd;
-    public static final int REMOVE_CROUTON = 0xc2007de1;
-  }
-
-    private static Manager sDefaultInstance;
-    private static List<SoftReference<Manager>> sSoftInstances = new ArrayList<SoftReference<Manager>>();
-
+  private static Manager sDefaultInstance;
+  private static List<SoftReference<Manager>> sSoftInstances = new ArrayList<SoftReference<Manager>>();
   private Queue<Crouton> croutonQueue;
 
   private Manager() {
@@ -71,65 +61,111 @@ public final class Manager extends Handler {
     return sDefaultInstance;
   }
 
-    /**
-     * Instead of using the default instance create a new one, so we can show multiple croutons at the same time.
-     * It is up to you to maintain the reference to the instances so that you can put croutons onto certain queues.
-     * <p/>
-     * <b>Make sure you know what you are doing when using this method!</b>
-     * <p/>
-     * @return new Manager instance, this will always be a new instance.
-     */
-      static Manager getNewInstance() {
-          final Manager manager = new Manager();
-          sSoftInstances.add(new SoftReference<Manager>(manager));
-          return manager;
+  /**
+   * Instead of using the default instance create a new one, so we can show multiple croutons at the same time.
+   * It is up to you to maintain the reference to the instances so that you can put croutons onto certain queues.
+   * <p/>
+   * <b>Make sure you know what you are doing when using this method!</b>
+   * <p/>
+   *
+   * @return new Manager instance, this will always be a new instance.
+   */
+  static Manager getNewInstance() {
+    final Manager manager = new Manager();
+    sSoftInstances.add(new SoftReference<Manager>(manager));
+    return manager;
+  }
+
+  /**
+   * Clear the crouton queues that are available!
+   */
+  static void clearAllCroutonQueues() {
+    Manager manager;
+    for (SoftReference<Manager> softInstance : sSoftInstances) {
+      if (softInstance != null) {
+        if (softInstance.get() != null) {
+          manager = softInstance.get();
+          manager.clearCroutonQueue();
+        } else {
+          sSoftInstances.remove(softInstance);
+        }
+      }
+    }
+    if (sDefaultInstance != null)
+      sDefaultInstance.clearCroutonQueue();
+  }
+
+  /**
+   * Clear the crouton queues that are available! For an Activity!
+   */
+  static void clearAllCroutonsForActivity(final Activity activity) {
+    Manager manager;
+    for (SoftReference<Manager> softInstance : sSoftInstances) {
+      if (softInstance != null) {
+        if (softInstance.get() != null) {
+          manager = softInstance.get();
+          manager.clearCroutonsForActivity(activity);
+        } else {
+          sSoftInstances.remove(softInstance);
+        }
+      }
+    }
+    if (sDefaultInstance != null)
+      sDefaultInstance.clearCroutonsForActivity(activity);
+  }
+
+  /**
+   * Generates and dispatches an SDK-specific spoken announcement.
+   * <p>
+   * For backwards compatibility, we're constructing an event from scratch
+   * using the appropriate event type. If your application only targets SDK
+   * 16+, you can just call View.announceForAccessibility(CharSequence).
+   * </p>
+   * <p/>
+   * note: AccessibilityManager is only available from API lvl 4.
+   * <p/>
+   * Adapted from https://http://eyes-free.googlecode.com/files/accessibility_codelab_demos_v2_src.zip
+   * via https://github.com/coreform/android-formidable-validation
+   *
+   * @param context Used to get {@link AccessibilityManager}
+   * @param text    The text to announce.
+   */
+  public static void announceForAccessibilityCompat(Context context, CharSequence text) {
+    if (Build.VERSION.SDK_INT >= 4) {
+      AccessibilityManager accessibilityManager = (AccessibilityManager) context.getSystemService(
+              Context.ACCESSIBILITY_SERVICE);
+      if (!accessibilityManager.isEnabled()) {
+        return;
       }
 
-    /**
-     * Clear the crouton queues that are available!
-     */
-    static void clearAllCroutonQueues() {
-        Manager manager;
-        for (SoftReference<Manager> softInstance : sSoftInstances)
-        {
-            if(softInstance != null) {
-                if (softInstance.get() != null) {
-                    manager = softInstance.get();
-                    manager.clearCroutonQueue();
-                } else {
-                    sSoftInstances.remove(softInstance);
-                }
-            }
-        }
-        if(sDefaultInstance != null)
-            sDefaultInstance.clearCroutonQueue();
-    }
+      // Prior to SDK 16, announcements could only be made through FOCUSED
+      // events. Jelly Bean (SDK 16) added support for speaking text verbatim
+      // using the ANNOUNCEMENT event type.
+      final int eventType;
+      if (Build.VERSION.SDK_INT < 16) {
+        eventType = AccessibilityEvent.TYPE_VIEW_FOCUSED;
+      } else {
+        eventType = AccessibilityEventCompat.TYPE_ANNOUNCEMENT;
+      }
 
-    /**
-     * Clear the crouton queues that are available! For an Activity!
-     */
-    static void clearAllCroutonsForActivity(final Activity activity) {
-        Manager manager;
-        for (SoftReference<Manager> softInstance : sSoftInstances)
-        {
-            if(softInstance != null) {
-                if (softInstance.get() != null) {
-                    manager = softInstance.get();
-                    manager.clearCroutonsForActivity(activity);
-                } else {
-                    sSoftInstances.remove(softInstance);
-                }
-            }
-        }
-        if(sDefaultInstance != null)
-            sDefaultInstance.clearCroutonsForActivity(activity);
+      // Construct an accessibility event with the minimum recommended
+      // attributes. An event without a class name or package may be dropped.
+      final AccessibilityEvent event = AccessibilityEvent.obtain(eventType);
+      event.getText().add(text);
+      event.setClassName(Manager.class.getName());
+      event.setPackageName(context.getPackageName());
+
+      // Sends the event directly through the accessibility manager. If your
+      // application only targets SDK 14+, you should just call
+      // getParent().requestSendAccessibilityEvent(this, event);
+      accessibilityManager.sendAccessibilityEvent(event);
     }
+  }
 
   /**
    * Inserts a {@link Crouton} to be displayed.
    *
-   * @param crouton
-   *   The {@link Crouton} to be displayed.
+   * @param crouton The {@link Crouton} to be displayed.
    */
   void add(Crouton crouton) {
     croutonQueue.add(crouton);
@@ -173,10 +209,8 @@ public final class Manager extends Handler {
   /**
    * Sends a {@link Crouton} within a {@link Message}.
    *
-   * @param crouton
-   *   The {@link Crouton} that should be sent.
-   * @param messageId
-   *   The {@link Message} id.
+   * @param crouton   The {@link Crouton} that should be sent.
+   * @param messageId The {@link Message} id.
    */
   private void sendMessage(Crouton crouton, final int messageId) {
     final Message message = obtainMessage(messageId);
@@ -187,12 +221,9 @@ public final class Manager extends Handler {
   /**
    * Sends a {@link Crouton} within a delayed {@link Message}.
    *
-   * @param crouton
-   *   The {@link Crouton} that should be sent.
-   * @param messageId
-   *   The {@link Message} id.
-   * @param delay
-   *   The delay in milliseconds.
+   * @param crouton   The {@link Crouton} that should be sent.
+   * @param messageId The {@link Message} id.
+   * @param delay     The delay in milliseconds.
    */
   private void sendMessageDelayed(Crouton crouton, final int messageId, final long delay) {
     Message message = obtainMessage(messageId);
@@ -238,8 +269,7 @@ public final class Manager extends Handler {
   /**
    * Adds a {@link Crouton} to the {@link ViewParent} of it's {@link Activity}.
    *
-   * @param crouton
-   *   The {@link Crouton} that should be added.
+   * @param crouton The {@link Crouton} that should be added.
    */
   private void addCroutonToView(Crouton crouton) {
     // don't add if it is already showing
@@ -273,7 +303,7 @@ public final class Manager extends Handler {
     announceForAccessibilityCompat(crouton.getActivity(), crouton.getText());
     if (Configuration.DURATION_INFINITE != crouton.getConfiguration().durationInMilliseconds) {
       sendMessageDelayed(crouton, Messages.REMOVE_CROUTON,
-        crouton.getConfiguration().durationInMilliseconds + crouton.getInAnimation().getDuration());
+              crouton.getConfiguration().durationInMilliseconds + crouton.getInAnimation().getDuration());
     }
   }
 
@@ -281,9 +311,8 @@ public final class Manager extends Handler {
    * Removes the {@link Crouton}'s view after it's display
    * durationInMilliseconds.
    *
-   * @param crouton
-   *   The {@link Crouton} added to a {@link ViewGroup} and should be
-   *   removed.
+   * @param crouton The {@link Crouton} added to a {@link ViewGroup} and should be
+   *                removed.
    */
   void removeCrouton(Crouton crouton) {
     View croutonView = crouton.getView();
@@ -316,8 +345,7 @@ public final class Manager extends Handler {
    * Removes a {@link Crouton} immediately, even when it's currently being
    * displayed.
    *
-   * @param crouton
-   *   The {@link Crouton} that should be removed.
+   * @param crouton The {@link Crouton} that should be removed.
    */
   void removeCroutonImmediately(Crouton crouton) {
     // if Crouton has already been displayed then it may not be in the queue (because it was popped).
@@ -410,53 +438,12 @@ public final class Manager extends Handler {
 
   }
 
-  /**
-   * Generates and dispatches an SDK-specific spoken announcement.
-   * <p>
-   * For backwards compatibility, we're constructing an event from scratch
-   * using the appropriate event type. If your application only targets SDK
-   * 16+, you can just call View.announceForAccessibility(CharSequence).
-   * </p>
-   * <p/>
-   * note: AccessibilityManager is only available from API lvl 4.
-   * <p/>
-   * Adapted from https://http://eyes-free.googlecode.com/files/accessibility_codelab_demos_v2_src.zip
-   * via https://github.com/coreform/android-formidable-validation
-   *
-   * @param context
-   *   Used to get {@link AccessibilityManager}
-   * @param text
-   *   The text to announce.
-   */
-  public static void announceForAccessibilityCompat(Context context, CharSequence text) {
-    if (Build.VERSION.SDK_INT >= 4) {
-      AccessibilityManager accessibilityManager = (AccessibilityManager) context.getSystemService(
-        Context.ACCESSIBILITY_SERVICE);
-      if (!accessibilityManager.isEnabled()) {
-        return;
-      }
+  private static final class Messages {
+    public static final int DISPLAY_CROUTON = 0xc2007;
+    public static final int ADD_CROUTON_TO_VIEW = 0xc20074dd;
+    public static final int REMOVE_CROUTON = 0xc2007de1;
 
-      // Prior to SDK 16, announcements could only be made through FOCUSED
-      // events. Jelly Bean (SDK 16) added support for speaking text verbatim
-      // using the ANNOUNCEMENT event type.
-      final int eventType;
-      if (Build.VERSION.SDK_INT < 16) {
-        eventType = AccessibilityEvent.TYPE_VIEW_FOCUSED;
-      } else {
-        eventType = AccessibilityEventCompat.TYPE_ANNOUNCEMENT;
-      }
-
-      // Construct an accessibility event with the minimum recommended
-      // attributes. An event without a class name or package may be dropped.
-      final AccessibilityEvent event = AccessibilityEvent.obtain(eventType);
-      event.getText().add(text);
-      event.setClassName(Manager.class.getName());
-      event.setPackageName(context.getPackageName());
-
-      // Sends the event directly through the accessibility manager. If your
-      // application only targets SDK 14+, you should just call
-      // getParent().requestSendAccessibilityEvent(this, event);
-      accessibilityManager.sendAccessibilityEvent(event);
+    private Messages() { /* no-op */
     }
   }
 }
